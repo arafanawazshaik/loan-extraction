@@ -1,4 +1,4 @@
-
+# Loan Extraction Pipeline - Configuration
 import os
 from dataclasses import dataclass , field
 @dataclass
