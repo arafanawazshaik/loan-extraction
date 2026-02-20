@@ -1,4 +1,5 @@
 import logging
+from py_compile import main
 from pipeline.textract_client import TextractClient
 from pipeline.text_cleaner import TextCleaner
 from pipeline.classifier import DocumentClassifier
@@ -6,6 +7,7 @@ from pipeline.rule_engine import RuleEngine
 from pipeline.llm_extractor import LLMExtractor
 from pipeline.consensus import ConsensusChecker
 from pipeline.validator import Validator
+from pipeline.rag_retriever import RAGRetriever
 
 logger = logging.getLogger(__name__)
 
@@ -21,11 +23,22 @@ class ExtractionAgent:
         self.llm_extractor = LLMExtractor()
         self.consensus = ConsensusChecker()
         self.validator = Validator()
+        self.rag = RAGRetriever()
         logger.info("Agent initialized with all workers")
 
     def run(self, document_id):
         """Agent decides what steps to take."""
         state = {"document_id": document_id, "status": "started"}
+
+        state = self._step_ocr(state)
+        state = self._step_clean(state)
+        state = self._step_rag_store(state)
+        state = self._step_extract(state)
+        state = self._step_consensus(state)
+        state = self._step_validate(state)
+        state = self._step_decide(state)
+
+        return state
 
         # Step 1: OCR
         state = self._step_ocr(state)
@@ -63,14 +76,27 @@ class ExtractionAgent:
         state["status"] = "cleaned"
         return state
 
+    def _step_rag_store(self, state):
+        """Agent step: Store document chunks in vector DB."""
+        logger.info("Agent → Step 3: Storing in vector DB (RAG)")
+        chunks = self.rag.store_document(state["document_id"], state["clean_text"])
+        state["chunks"] = chunks
+        state["status"] = "stored_in_vectordb"
+        return state
+    
     def _step_extract(self, state):
-        """Agent step: Run both extraction methods."""
-        logger.info("Agent → Step 3: Extracting (rules + LLM)")
+        """Agent step: Run both extraction methods with RAG context."""
+        logger.info("Agent → Step 4: Extracting (rules + LLM with RAG)")
         text = state["clean_text"]
+
+        # RAG: Find relevant chunks for extraction
+        relevant_chunks = self.rag.retrieve("borrower name loan amount interest rate term payment")
+        rag_context = ' '.join(relevant_chunks)
+        logger.info(f"RAG provided {len(relevant_chunks)} relevant chunks")
 
         classification = self.classifier.classify(text)
         state["rule_result"] = self.rule_engine.extract(text, classification["loan_type"])
-        state["llm_result"] = self.llm_extractor.extract(text)
+        state["llm_result"] = self.llm_extractor.extract(rag_context)
         state["status"] = "extracted"
         return state
 
