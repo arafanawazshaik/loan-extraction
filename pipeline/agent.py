@@ -8,6 +8,7 @@ from pipeline.llm_extractor import LLMExtractor
 from pipeline.consensus import ConsensusChecker
 from pipeline.validator import Validator
 from pipeline.rag_retriever import RAGRetriever
+from pipeline.guardrails import Guardrails
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ class ExtractionAgent:
         self.consensus = ConsensusChecker()
         self.validator = Validator()
         self.rag = RAGRetriever()
+        self.guardrails = Guardrails()
         logger.info("Agent initialized with all workers")
 
     def run(self, document_id):
@@ -35,9 +37,10 @@ class ExtractionAgent:
         state = self._step_rag_store(state)
         state = self._step_extract(state)
         state = self._step_consensus(state)
+        state = self._step_guardrails(state)
         state = self._step_validate(state)
         state = self._step_decide(state)
-
+        
         return state
 
         # Step 1: OCR
@@ -105,6 +108,15 @@ class ExtractionAgent:
         logger.info("Agent → Step 4: Consensus check")
         state["final_result"] = self.consensus.check(state["rule_result"], state["llm_result"])
         state["status"] = "consensus_complete"
+        return state
+    
+    def _step_guardrails(self, state):
+        """Agent step: Check for hallucinations."""
+        logger.info("Agent → Step 5: Guardrails check")
+        state["guardrails"] = self.guardrails.check(state["final_result"], state["clean_text"])
+        if not state["guardrails"]["passed"]:
+            logger.warning("Guardrails failed — possible hallucinations detected")
+        state["status"] = "guardrails_checked"
         return state
 
     def _step_validate(self, state):
