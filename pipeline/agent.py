@@ -1,3 +1,4 @@
+import time
 import logging
 from py_compile import main
 from pipeline.textract_client import TextractClient
@@ -10,6 +11,7 @@ from pipeline.validator import Validator
 from pipeline.rag_retriever import RAGRetriever
 from pipeline.guardrails import Guardrails
 from pipeline.dynamodb_store import DynamoDBStore
+from pipeline.monitoring import PipelineMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -28,23 +30,50 @@ class ExtractionAgent:
         self.rag = RAGRetriever()
         self.guardrails = Guardrails()
         self.db = DynamoDBStore()
+        self.monitor = PipelineMonitor()
         logger.info("Agent initialized with all workers")
 
     def run(self, document_id):
         """Agent decides what steps to take."""
+        self.monitor.start_trace(document_id)
         state = {"document_id": document_id, "status": "started"}
 
+        start = time.time()
         state = self._step_ocr(state)
+        self.monitor.log_step("OCR", (time.time() - start) * 1000)
+
+        start = time.time()
         state = self._step_clean(state)
+        self.monitor.log_step("Clean", (time.time() - start) * 1000)
+
+        start = time.time()
         state = self._step_rag_store(state)
+        self.monitor.log_step("RAG Store", (time.time() - start) * 1000)
+
+        start = time.time()
         state = self._step_extract(state)
+        self.monitor.log_step("Extract", (time.time() - start) * 1000)
+        self.monitor.log_llm_call("mock", input_tokens=500, output_tokens=200)
+
+        start = time.time()
         state = self._step_consensus(state)
+        self.monitor.log_step("Consensus", (time.time() - start) * 1000)
+
+        start = time.time()
         state = self._step_guardrails(state)
+        self.monitor.log_step("Guardrails", (time.time() - start) * 1000)
+
+        start = time.time()
         state = self._step_validate(state)
+        self.monitor.log_step("Validate", (time.time() - start) * 1000)
+
+        start = time.time()
         state = self._step_decide(state)
+        self.monitor.log_step("Decide", (time.time() - start) * 1000)
+
         state = self._step_store(state)
 
-        
+        state["monitoring"] = self.monitor.end_trace()
         return state
 
         # Step 1: OCR
