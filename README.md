@@ -92,9 +92,3 @@ Valid: True
 - **AWS S3** - Document storage
 - **Docker + LocalStack** - Local AWS development
 - **Git/GitHub** - Version control with feature branch workflow
-
-## Coming Next (Project 2)
-
-- Agentic AI extraction using GPT-4 and LangGraph
-- 94% accuracy vs 78% rule-based
-- Multi-model consensus with Claude verification
