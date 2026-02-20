@@ -1,4 +1,5 @@
 import logging
+from pipeline.textract_client import TextractClient
 from pipeline.classifier import DocumentClassifier
 from pipeline.rule_engine import RuleEngine
 from pipeline.validator import Validator
@@ -11,20 +12,26 @@ def run_pipeline(document_id):
     """Run the full extraction pipeline on a document."""
     logger.info(f"=== Starting pipeline for {document_id} ===")
 
-    # Step 1: OCR - Skip for now (will use LocalStack later)
-    logger.info("Step 1: OCR skipped (no AWS credentials yet)")
-    sample_text = "Borrower: John Smith Loan Amount: $25,000 Interest Rate: 5.99% Term: 60 months"
+    # Step 1: OCR with Textract
+    logger.info("Step 1: Running Textract OCR...")
+    textract = TextractClient()
+    response = textract.process_document(document_id)
+    
+    # Extract text from Textract blocks
+    text_lines = [block['Text'] for block in response['Blocks'] if block.get('Text')]
+    raw_text = ' '.join(text_lines)
+    logger.info(f"Extracted text: {raw_text[:100]}...")
 
     # Step 2: Classify
     logger.info("Step 2: Classifying document...")
     classifier = DocumentClassifier()
-    classification = classifier.classify(sample_text)
+    classification = classifier.classify(raw_text)
     loan_type = classification["loan_type"]
 
     # Step 3: Extract
     logger.info("Step 3: Extracting fields...")
     extractor = RuleEngine()
-    extracted = extractor.extract(sample_text, loan_type)
+    extracted = extractor.extract(raw_text, loan_type)
 
     # Step 4: Validate
     logger.info("Step 4: Validating...")
@@ -42,7 +49,7 @@ def run_pipeline(document_id):
 
 
 if __name__ == "__main__":
-    result = run_pipeline("loan-doc-123.pdf")
+    result = run_pipeline("test_loan.pdf")
     print("\n=== FINAL RESULT ===")
     print(f"Document: {result['document_id']}")
     print(f"Loan Type: {result['loan_type']}")
@@ -50,6 +57,3 @@ if __name__ == "__main__":
     for field, data in result['extracted_fields'].items():
         if isinstance(data, dict):
             print(f"  {field}: {data['value']}")
-
-
-

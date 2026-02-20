@@ -1,0 +1,12 @@
+
+PERSONAL LOAN AGREEMENT
+
+Borrower: John Smith
+Loan Amount: $25,000
+Interest Rate: 5.99%
+Term: 60 months
+Monthly Payment: $483.15
+
+This agreement is between the borrower and First National Bank.
+The borrower agrees to repay the principal amount plus interest
+over the specified term period.

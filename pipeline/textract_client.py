@@ -1,8 +1,10 @@
-import boto3                           # AWS SDK for Python
-import logging                         # Diary Tools for logging
-from config.settings import Settings   # Importing configuration settings
+import os
+import boto3
+import logging
+from config.settings import Settings
+from pipeline.mock_textract import MockTextract
 
-logger = logging.getLogger(__name__)   # Setting up a logger for the module
+logger = logging.getLogger(__name__)
 
 
 class TextractClient:
@@ -10,7 +12,12 @@ class TextractClient:
 
     def __init__(self):
         self.settings = Settings()
-        self.client = boto3.client('textract', region_name=self.settings.aws.region)
+        if os.getenv("USE_MOCK", "true").lower() == "true":
+            self.client = MockTextract()
+            logger.info("Using MockTextract for local development")
+        else:
+            self.client = boto3.client('textract', region_name=self.settings.aws.region)
+            logger.info("Using real AWS Textract")
 
     def process_document(self, document_id, s3_bucket=None, page_count=1):
         """Process a document from S3 using Textract."""
@@ -32,17 +39,21 @@ class TextractClient:
 
     def call_textract(self, document_id, s3_bucket):
         """Send document to Textract and get results."""
-        response = self.client.analyze_document(
-            Document={
-                'S3Object': {
-                    'Bucket': s3_bucket,
-                    'Name': document_id
-                }
-            },
-            FeatureTypes=['TABLES', 'FORMS']
-        )
-        logger.info(f"Textract returned {len(response['Blocks'])} blocks")
-        return response       
+        try:
+            response = self.client.analyze_document(
+                Document={
+                    'S3Object': {
+                        'Bucket': s3_bucket,
+                        'Name': document_id
+                    }
+                },
+                FeatureTypes=['TABLES', 'FORMS']
+            )
+            logger.info(f"Textract returned {len(response['Blocks'])} blocks")
+            return response
+        except Exception as e:
+            logger.error(f"Textract failed for {document_id}: {e}")
+            raise
 
     def needs_chunking(self, page_count):
         """Check if document needs to be split into chunks."""
@@ -52,7 +63,7 @@ class TextractClient:
             return True
         logger.info(f"Document has {page_count} pages, no chunking needed.")
         return False
-        
+
     def chunk_pages(self, total_pages):
         """Split page numbers into chunks."""
         chunk_size = self.settings.textract.chunk_size
