@@ -9,6 +9,7 @@ from pipeline.consensus import ConsensusChecker
 from pipeline.validator import Validator
 from pipeline.rag_retriever import RAGRetriever
 from pipeline.guardrails import Guardrails
+from pipeline.dynamodb_store import DynamoDBStore
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class ExtractionAgent:
         self.validator = Validator()
         self.rag = RAGRetriever()
         self.guardrails = Guardrails()
+        self.db = DynamoDBStore()
         logger.info("Agent initialized with all workers")
 
     def run(self, document_id):
@@ -40,6 +42,8 @@ class ExtractionAgent:
         state = self._step_guardrails(state)
         state = self._step_validate(state)
         state = self._step_decide(state)
+        state = self._step_store(state)
+
         
         return state
 
@@ -147,4 +151,11 @@ class ExtractionAgent:
             state["status"] = "approved"
             logger.info("Agent decision: All fields approved ✅")
 
+        return state
+
+    def _step_store(self, state):
+        """Agent step: Store results in DynamoDB."""
+        logger.info("Agent → Step 8: Storing in DynamoDB")
+        self.db.store_result(state)
+        state["status"] = "stored"
         return state
